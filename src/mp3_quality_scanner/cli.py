@@ -5,7 +5,9 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from mp3_quality_scanner.analyzers.clipping import ClippingAnalyzer
 from mp3_quality_scanner.config import settings
+from mp3_quality_scanner.progress import ScanProgress
 from mp3_quality_scanner.toolchain import ToolchainError, check_toolchain
 
 app = typer.Typer(
@@ -64,15 +66,17 @@ def scan(
     database_path = database or settings.output_dir / "scan.db"
     report_path = output or settings.output_dir / "scan.csv"
 
-    runner = ScanRunner(analyzers=[IntegrityAnalyzer()])
+    runner = ScanRunner(analyzers=[IntegrityAnalyzer(), ClippingAnalyzer()])
 
     with ScanRepository(database_path) as repository:
-        stats = runner.scan_directory(
-            directory=path,
-            repository=repository,
-            force=force,
-            workers=workers or settings.workers,
-        )
+        with ScanProgress(console) as progress:
+            stats = runner.scan_directory(
+                directory=path,
+                repository=repository,
+                force=force,
+                workers=workers or settings.workers,
+                callback=progress.on_event,
+            )
 
         repository.export_csv(report_path)
 

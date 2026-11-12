@@ -182,7 +182,13 @@ class ScanRepository:
         with self.connection:
             self.connection.execute(
                 """
-                INSERT INTO audio_file (path, size, mtime_ns, status, scanned_at, analyzer_fingerprint, scan_state)
+                INSERT INTO audio_file (path,
+                                        size,
+                                        mtime_ns,
+                                        status,
+                                        scanned_at,
+                                        analyzer_fingerprint,
+                                        scan_state)
                 VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO
                 UPDATE SET
                     size = excluded.size,
