@@ -15,9 +15,12 @@ from mp3_quality_scanner.models import (
     ScanResult,
     Severity,
 )
-from mp3_quality_scanner.quality import assess_quality
+from mp3_quality_scanner.quality import (
+    QUALITY_MODEL_VERSION,
+    assess_quality,
+)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -78,23 +81,31 @@ class ScanRepository:
         if version > SCHEMA_VERSION:
             raise RuntimeError(f"Unsupported database schema version: {version}")
 
+        # Detect databases without a recorded schema version.
         if version == 0:
             tables = {
                 row["name"]
                 for row in self.connection.execute(
-                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                    """
+                    SELECT name
+                    FROM sqlite_master
+                    WHERE type = 'table'
+                    """
                 )
             }
 
             if "audio_file" not in tables:
+                # Create a fresh database with the latest schema.
                 self._create_schema()
                 return
 
-            # Existing database without a recorded schema
-            # version: inspect the current structure.
+            # Existing database without a schema version:
+            # determine its version from the available columns.
             columns = self._table_columns("audio_file")
 
-            if {
+            if "quality_model_version" in columns:
+                version = 4
+            elif {
                 "quality_score",
                 "quality_label",
             }.issubset(columns):
@@ -104,16 +115,31 @@ class ScanRepository:
             else:
                 version = 1
 
+        # Migrate schema v1 -> v2.
         if version < 2:
             self._migrate_to_v2()
             version = 2
 
+        # Migrate schema v2 -> v3.
         if version < 3:
             self._migrate_to_v3()
             version = 3
 
+        # Migrate schema v3 -> v4.
+        if version < 4:
+            self._migrate_to_v4()
+            version = 4
+
+        # Persist the current database schema version.
         with self._transaction():
             self.connection.execute(f"PRAGMA user_version = {version}")
+
+        # Recalculate scores only for files whose quality
+        # model version differs from the current version.
+        #
+        # This uses stored findings and metadata.
+        # No MP3 decoding or FFmpeg invocation is required.
+        self.recalculate_outdated_quality_scores()
 
     def _table_columns(
         self,
@@ -127,45 +153,122 @@ class ScanRepository:
         with self._transaction():
             self.connection.executescript(
                 """
-                CREATE TABLE IF NOT EXISTS audio_file (
-                    id INTEGER PRIMARY KEY,
-                    path TEXT NOT NULL UNIQUE,
-                    size INTEGER NOT NULL,
-                    mtime_ns INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    scanned_at TEXT NOT NULL,
-                    analyzer_fingerprint TEXT NOT NULL,
-                    scan_state TEXT NOT NULL
-                        DEFAULT 'completed',
-                    quality_score INTEGER,
-                    quality_label TEXT
+                CREATE TABLE IF NOT EXISTS audio_file
+                (
+                    id
+                    INTEGER
+                    PRIMARY
+                    KEY,
+                    path
+                    TEXT
+                    NOT
+                    NULL
+                    UNIQUE,
+                    size
+                    INTEGER
+                    NOT
+                    NULL,
+                    mtime_ns
+                    INTEGER
+                    NOT
+                    NULL,
+                    status
+                    TEXT
+                    NOT
+                    NULL,
+                    scanned_at
+                    TEXT
+                    NOT
+                    NULL,
+                    analyzer_fingerprint
+                    TEXT
+                    NOT
+                    NULL,
+                    scan_state
+                    TEXT
+                    NOT
+                    NULL
+                    DEFAULT
+                    'completed',
+                    quality_score
+                    INTEGER,
+                    quality_label
+                    TEXT,
+                    quality_model_version
+                    INTEGER
                 );
 
-                CREATE TABLE IF NOT EXISTS analysis (
-                    id INTEGER PRIMARY KEY,
-                    audio_file_id INTEGER NOT NULL,
-                    analyzer TEXT NOT NULL,
-                    codec TEXT,
-                    duration_seconds REAL,
-                    bitrate INTEGER,
-                    sample_rate INTEGER,
-                    channels INTEGER,
-                    FOREIGN KEY (audio_file_id)
-                        REFERENCES audio_file(id)
-                        ON DELETE CASCADE
-                );
+                CREATE TABLE IF NOT EXISTS analysis
+                (
+                    id
+                    INTEGER
+                    PRIMARY
+                    KEY,
+                    audio_file_id
+                    INTEGER
+                    NOT
+                    NULL,
+                    analyzer
+                    TEXT
+                    NOT
+                    NULL,
+                    codec
+                    TEXT,
+                    duration_seconds
+                    REAL,
+                    bitrate
+                    INTEGER,
+                    sample_rate
+                    INTEGER,
+                    channels
+                    INTEGER,
+                    FOREIGN
+                    KEY
+                (
+                    audio_file_id
+                )
+                    REFERENCES audio_file
+                (
+                    id
+                )
+                    ON DELETE CASCADE
+                    );
 
-                CREATE TABLE IF NOT EXISTS finding (
-                    id INTEGER PRIMARY KEY,
-                    analysis_id INTEGER NOT NULL,
-                    code TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    position_seconds REAL,
-                    FOREIGN KEY (analysis_id)
-                        REFERENCES analysis(id)
-                        ON DELETE CASCADE
-                );
+                CREATE TABLE IF NOT EXISTS finding
+                (
+                    id
+                    INTEGER
+                    PRIMARY
+                    KEY,
+                    analysis_id
+                    INTEGER
+                    NOT
+                    NULL,
+                    code
+                    TEXT
+                    NOT
+                    NULL,
+                    severity
+                    TEXT
+                    NOT
+                    NULL,
+                    message
+                    TEXT
+                    NOT
+                    NULL,
+                    position_seconds
+                    REAL,
+                    FOREIGN
+                    KEY
+                (
+                    analysis_id
+                )
+                    REFERENCES analysis
+                (
+                    id
+                )
+                    ON DELETE CASCADE
+                    );
 
                 CREATE INDEX IF NOT EXISTS
                     idx_audio_file_status
@@ -195,8 +298,8 @@ class ScanRepository:
                 self.connection.execute(
                     """
                     ALTER TABLE audio_file
-                    ADD COLUMN scan_state TEXT NOT NULL
-                    DEFAULT 'completed'
+                        ADD COLUMN scan_state TEXT NOT NULL
+                            DEFAULT 'completed'
                     """
                 )
 
@@ -210,7 +313,7 @@ class ScanRepository:
                 self.connection.execute(
                     """
                     ALTER TABLE audio_file
-                    ADD COLUMN quality_score INTEGER
+                        ADD COLUMN quality_score INTEGER
                     """
                 )
 
@@ -218,7 +321,7 @@ class ScanRepository:
                 self.connection.execute(
                     """
                     ALTER TABLE audio_file
-                    ADD COLUMN quality_label TEXT
+                        ADD COLUMN quality_label TEXT
                     """
                 )
 
@@ -232,7 +335,19 @@ class ScanRepository:
 
             self.connection.execute("PRAGMA user_version = 3")
 
-        self._backfill_quality_scores()
+    def _migrate_to_v4(self) -> None:
+        columns = self._table_columns("audio_file")
+
+        with self._transaction():
+            if "quality_model_version" not in columns:
+                self.connection.execute(
+                    """
+                    ALTER TABLE audio_file
+                        ADD COLUMN quality_model_version INTEGER
+                    """
+                )
+
+            self.connection.execute("PRAGMA user_version = 4")
 
     def _backfill_quality_scores(self) -> None:
         rows = self.connection.execute(
@@ -319,28 +434,28 @@ class ScanRepository:
         with self._transaction():
             self.connection.execute(
                 """
-                INSERT INTO audio_file (
-                    path,
-                    size,
-                    mtime_ns,
-                    status,
-                    scanned_at,
-                    analyzer_fingerprint,
-                    scan_state,
-                    quality_score,
-                    quality_label
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(path) DO UPDATE SET
+                INSERT INTO audio_file (path,
+                                        size,
+                                        mtime_ns,
+                                        status,
+                                        scanned_at,
+                                        analyzer_fingerprint,
+                                        scan_state,
+                                        quality_score,
+                                        quality_label,
+                                        quality_model_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO
+                UPDATE SET
                     size = excluded.size,
                     mtime_ns = excluded.mtime_ns,
                     status = excluded.status,
                     scanned_at = excluded.scanned_at,
                     analyzer_fingerprint =
-                        excluded.analyzer_fingerprint,
+                    excluded.analyzer_fingerprint,
                     scan_state = excluded.scan_state,
                     quality_score = excluded.quality_score,
-                    quality_label = excluded.quality_label
+                    quality_label = excluded.quality_label,
+                    quality_model_version = excluded.quality_model_version
                 """,
                 (
                     relative_path,
@@ -352,6 +467,7 @@ class ScanRepository:
                     scan_state,
                     quality_score,
                     quality_label,
+                    (QUALITY_MODEL_VERSION if assessment is not None else None),
                 ),
             )
 
@@ -372,19 +488,19 @@ class ScanRepository:
             # Remove previous findings and analyses.
             self.connection.execute(
                 """
-                DELETE FROM finding
-                WHERE analysis_id IN (
-                    SELECT id
-                    FROM analysis
-                    WHERE audio_file_id = ?
-                )
+                DELETE
+                FROM finding
+                WHERE analysis_id IN (SELECT id
+                                      FROM analysis
+                                      WHERE audio_file_id = ?)
                 """,
                 (file_id,),
             )
 
             self.connection.execute(
                 """
-                DELETE FROM analysis
+                DELETE
+                FROM analysis
                 WHERE audio_file_id = ?
                 """,
                 (file_id,),
@@ -405,15 +521,13 @@ class ScanRepository:
 
         cursor = self.connection.execute(
             """
-            INSERT INTO analysis (
-                audio_file_id,
-                analyzer,
-                codec,
-                duration_seconds,
-                bitrate,
-                sample_rate,
-                channels
-            )
+            INSERT INTO analysis (audio_file_id,
+                                  analyzer,
+                                  codec,
+                                  duration_seconds,
+                                  bitrate,
+                                  sample_rate,
+                                  channels)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -435,13 +549,11 @@ class ScanRepository:
         for finding in analysis.findings:
             self.connection.execute(
                 """
-                INSERT INTO finding (
-                    analysis_id,
-                    code,
-                    severity,
-                    message,
-                    position_seconds
-                )
+                INSERT INTO finding (analysis_id,
+                                     code,
+                                     severity,
+                                     message,
+                                     position_seconds)
                 VALUES (?, ?, ?, ?, ?)
                 """,
                 (
@@ -460,14 +572,13 @@ class ScanRepository:
     ) -> ScanResult:
         rows = self.connection.execute(
             """
-            SELECT
-                a.id,
-                a.analyzer,
-                a.codec,
-                a.duration_seconds,
-                a.bitrate,
-                a.sample_rate,
-                a.channels
+            SELECT a.id,
+                   a.analyzer,
+                   a.codec,
+                   a.duration_seconds,
+                   a.bitrate,
+                   a.sample_rate,
+                   a.channels
             FROM analysis a
             WHERE a.audio_file_id = ?
             ORDER BY a.id
@@ -491,11 +602,10 @@ class ScanRepository:
 
             finding_rows = self.connection.execute(
                 """
-                SELECT
-                    code,
-                    severity,
-                    message,
-                    position_seconds
+                SELECT code,
+                       severity,
+                       message,
+                       position_seconds
                 FROM finding
                 WHERE analysis_id = ?
                 ORDER BY id
@@ -537,33 +647,31 @@ class ScanRepository:
 
         rows = self.connection.execute(
             """
-            SELECT
-                af.id,
-                af.path,
-                af.size,
-                af.mtime_ns,
-                af.status,
-                af.scanned_at,
-                af.scan_state,
-                af.quality_score,
-                af.quality_label,
-                COUNT(
-                    CASE
-                        WHEN f.code = 'POSSIBLE_CLICK'
-                        THEN 1
-                    END
-                ) AS click_count,
-                COUNT(f.id) AS finding_count
+            SELECT af.id,
+                   af.path,
+                   af.size,
+                   af.mtime_ns,
+                   af.status,
+                   af.scanned_at,
+                   af.scan_state,
+                   af.quality_score,
+                   af.quality_label,
+                   COUNT(
+                           CASE
+                               WHEN f.code = 'POSSIBLE_CLICK'
+                                   THEN 1
+                               END
+                   )           AS click_count,
+                   COUNT(f.id) AS finding_count
             FROM audio_file af
-            LEFT JOIN analysis a
-                ON a.audio_file_id = af.id
-            LEFT JOIN finding f
-                ON f.analysis_id = a.id
+                     LEFT JOIN analysis a
+                               ON a.audio_file_id = af.id
+                     LEFT JOIN finding f
+                               ON f.analysis_id = a.id
             GROUP BY af.id
-            ORDER BY
-                af.quality_score IS NULL,
-                af.quality_score ASC,
-                af.path ASC
+            ORDER BY af.quality_score IS NULL,
+                     af.quality_score ASC,
+                     af.path ASC
             """
         ).fetchall()
 
@@ -596,14 +704,13 @@ class ScanRepository:
             for row in rows:
                 finding_rows = self.connection.execute(
                     """
-                    SELECT
-                        f.code,
-                        f.severity,
-                        f.message,
-                        f.position_seconds
+                    SELECT f.code,
+                           f.severity,
+                           f.message,
+                           f.position_seconds
                     FROM finding f
-                    JOIN analysis a
-                        ON a.id = f.analysis_id
+                             JOIN analysis a
+                                  ON a.id = f.analysis_id
                     WHERE a.audio_file_id = ?
                     ORDER BY f.id
                     """,
@@ -768,6 +875,59 @@ class ScanRepository:
                         assessment.score,
                         assessment.label,
                         row["id"],
+                    ),
+                )
+
+                updated += 1
+
+        return updated
+
+    def recalculate_outdated_quality_scores(self) -> int:
+        """Recalculate scores when the quality model changes."""
+
+        rows = self.connection.execute(
+            """
+            SELECT id, path
+            FROM audio_file
+            WHERE scan_state = 'completed'
+              AND (
+                quality_model_version IS NULL
+                    OR quality_model_version != ?
+                )
+            """,
+            (QUALITY_MODEL_VERSION,),
+        ).fetchall()
+
+        updated = 0
+
+        with self._transaction():
+            for row in rows:
+                file_id = int(row["id"])
+
+                result = self._load_result(
+                    file_id=file_id,
+                    path=Path(str(row["path"])),
+                )
+
+                if not result.analyses:
+                    # Do not mark incomplete records as current.
+                    continue
+
+                assessment = assess_quality(result)
+
+                self.connection.execute(
+                    """
+                    UPDATE audio_file
+                    SET quality_score         = ?,
+                        quality_label         = ?,
+                        quality_model_version = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        assessment.score,
+                        assessment.label,
+                        QUALITY_MODEL_VERSION,
+                        file_id,
                     ),
                 )
 
