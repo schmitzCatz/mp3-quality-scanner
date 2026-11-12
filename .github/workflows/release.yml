@@ -3,53 +3,53 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  verify-and-build:
+  release:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
-      - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - name: Sync dependencies
-        run: uv sync --frozen
-      - name: Formatting
-        run: uv run ruff format --check .
-      - name: Lint
-        run: uv run ruff check .
-      - name: Types
-        run: uv run mypy
-      - name: Tests
-        run: uv run pytest
-      - name: Build distributions
-        run: uv build
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-distributions
-          path: dist/*
 
-  github-release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: verify-and-build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: python-distributions
-          path: dist
-      - name: Create GitHub Release
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --locked --group dev
+
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+
+      - name: Lint
+        run: uv run --locked ruff check .
+
+      - name: Type check
+        run: uv run --locked mypy
+
+      - name: Run tests
+        run: uv run --locked pytest
+
+      - name: Build package
+        run: uv build
+
+      - name: Create draft release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/* --title "MP3 Quality Scanner ${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md --draft
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/* \
+            --draft \
+            --generate-notes \
+            --title "${GITHUB_REF_NAME}"

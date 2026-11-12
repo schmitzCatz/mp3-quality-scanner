@@ -47,7 +47,13 @@ select = [
     "SIM",
     "RUF",
 ]
-
+[dependency-groups]
+dev = [
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "pytest>=8.0",
+    "pytest-cov>=6.0",
+]
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
