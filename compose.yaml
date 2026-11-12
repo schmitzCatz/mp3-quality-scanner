@@ -1,0 +1,15 @@
+services:
+  scanner:
+    build:
+      context: .
+    image: mp3-quality-scanner:local
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      MP3QS_MUSIC_DIR: /music
+      MP3QS_OUTPUT_DIR: /data
+      MP3QS_WORKERS: ${MP3QS_WORKERS:-2}
+    volumes:
+      - ${MUSIC_PATH:?MUSIC_PATH is required}:/music:ro
+      - ./data:/data
+    command: ["scan", "/music"]
+    restart: "no"

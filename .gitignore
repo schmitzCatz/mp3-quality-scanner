@@ -1,5 +1,7 @@
+.venv/
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*.pyc
 *.py[codz]
 *$py.class
 
@@ -207,6 +209,10 @@ tempCodeRunnerFile.py
 
 # Ruff stuff:
 .ruff_cache/
+.coverage
+htmlcov/
+data/
+.env
 
 # PyPI configuration file
 .pypirc
