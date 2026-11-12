@@ -7,6 +7,7 @@ from rich.console import Console
 
 from mp3_quality_scanner.analyzers.click import ClickAnalyzer
 from mp3_quality_scanner.analyzers.clipping import ClippingAnalyzer
+from mp3_quality_scanner.analyzers.dropout import DropoutAnalyzer
 from mp3_quality_scanner.config import settings
 from mp3_quality_scanner.progress import ScanProgress
 from mp3_quality_scanner.reporting.console import render_quality_report
@@ -68,7 +69,9 @@ def scan(
     database_path = database or settings.output_dir / "scan.db"
     report_path = output or settings.output_dir / "scan.csv"
 
-    runner = ScanRunner(analyzers=[IntegrityAnalyzer(), ClippingAnalyzer(), ClickAnalyzer()])
+    runner = ScanRunner(
+        analyzers=[IntegrityAnalyzer(), ClippingAnalyzer(), ClickAnalyzer(), DropoutAnalyzer()]
+    )
 
     with ScanRepository(database_path) as repository:
         with ScanProgress(console) as progress:

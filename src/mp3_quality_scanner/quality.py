@@ -26,9 +26,10 @@ PENALTIES = {
     "HIGH_CLIPPING_RATIO": 15,
     "SUSTAINED_CLIPPING": 20,
     "CLICK_FINDINGS_TRUNCATED": 10,
+    "DROPOUT_FINDINGS_TRUNCATED": 10,
 }
 
-QUALITY_MODEL_VERSION = 2
+QUALITY_MODEL_VERSION = 3
 
 
 def assess_quality(result: ScanResult) -> QualityAssessment:
@@ -80,8 +81,11 @@ def assess_quality(result: ScanResult) -> QualityAssessment:
     )
 
     other_penalty = sum(value for code, value in PENALTIES.items() if code in codes)
+    dropout_count = sum(finding.code == "POSSIBLE_DROPOUT" for finding in findings)
 
-    penalty = min(100, click_penalty + other_penalty)
+    dropout_penalty = min(dropout_count * 12, 60)
+
+    penalty = min(100, click_penalty + dropout_penalty + other_penalty)
     score = 100 - penalty
 
     if score < 50:
