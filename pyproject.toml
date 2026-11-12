@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mp3-quality-scanner"
-version = "0.1.0"
-description = "Automated MP3 integrity and audio quality analysis"
+version = "1.0.0"
+description = "Analyze MP3 files for integrity issues and potential audible defects"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
@@ -13,7 +13,7 @@ dependencies = [
     "numpy>=2.0,<3.0",
     "scipy>=1.14,<2.0",
     "typer>=0.15,<1.0",
-    "rich>=13.9,<15.0",
+    "rich==15.0.0",
     "pydantic-settings>=2.7,<3.0",
     "scipy-stubs~=1.18.1",
 ]
