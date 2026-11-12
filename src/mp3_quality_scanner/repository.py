@@ -17,60 +17,153 @@ class ScanRepository:
         self._initialize()
 
     def _initialize(self) -> None:
-        with self.connection:
-            self.connection.executescript("""
-                CREATE TABLE IF NOT EXISTS audio_file (
-                    id INTEGER PRIMARY KEY,
-                    path TEXT NOT NULL UNIQUE,
-                    size INTEGER NOT NULL,
-                    mtime_ns INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    scanned_at TEXT NOT NULL
-                );
+        version = self.connection.execute("PRAGMA user_version").fetchone()[0]
 
-                CREATE TABLE IF NOT EXISTS analysis (
-                    id INTEGER PRIMARY KEY,
-                    audio_file_id INTEGER NOT NULL,
-                    analyzer TEXT NOT NULL,
-                    codec TEXT,
-                    duration_seconds REAL,
-                    bitrate INTEGER,
-                    sample_rate INTEGER,
-                    channels INTEGER,
-                    FOREIGN KEY (audio_file_id)
-                        REFERENCES audio_file(id)
-                        ON DELETE CASCADE
-                );
+        if version == 0:
+            with self.connection:
+                self.connection.executescript("""
+                                              CREATE TABLE IF NOT EXISTS audio_file
+                                              (
+                                                  id
+                                                  INTEGER
+                                                  PRIMARY
+                                                  KEY,
+                                                  path
+                                                  TEXT
+                                                  NOT
+                                                  NULL
+                                                  UNIQUE,
+                                                  size
+                                                  INTEGER
+                                                  NOT
+                                                  NULL,
+                                                  mtime_ns
+                                                  INTEGER
+                                                  NOT
+                                                  NULL,
+                                                  status
+                                                  TEXT
+                                                  NOT
+                                                  NULL,
+                                                  scanned_at
+                                                  TEXT
+                                                  NOT
+                                                  NULL,
+                                                  analyzer_fingerprint
+                                                  TEXT,
+                                                  scan_state
+                                                  TEXT
+                                                  NOT
+                                                  NULL
+                                                  DEFAULT
+                                                  'completed'
+                                              );
 
-                CREATE TABLE IF NOT EXISTS finding (
-                    id INTEGER PRIMARY KEY,
-                    analysis_id INTEGER NOT NULL,
-                    code TEXT NOT NULL,
-                    severity TEXT NOT NULL,
-                    message TEXT NOT NULL,
-                    position_seconds REAL,
-                    FOREIGN KEY (analysis_id)
-                        REFERENCES analysis(id)
-                        ON DELETE CASCADE
-                );
-            """)
+                                              CREATE TABLE IF NOT EXISTS analysis
+                                              (
+                                                  id
+                                                  INTEGER
+                                                  PRIMARY
+                                                  KEY,
+                                                  audio_file_id
+                                                  INTEGER
+                                                  NOT
+                                                  NULL,
+                                                  analyzer
+                                                  TEXT
+                                                  NOT
+                                                  NULL,
+                                                  codec
+                                                  TEXT,
+                                                  duration_seconds
+                                                  REAL,
+                                                  bitrate
+                                                  INTEGER,
+                                                  sample_rate
+                                                  INTEGER,
+                                                  channels
+                                                  INTEGER,
+                                                  FOREIGN
+                                                  KEY
+                                              (
+                                                  audio_file_id
+                                              )
+                                                  REFERENCES audio_file
+                                              (
+                                                  id
+                                              )
+                                                  ON DELETE CASCADE
+                                                  );
 
-            self.connection.execute("PRAGMA user_version = 1")
+                                              CREATE TABLE IF NOT EXISTS finding
+                                              (
+                                                  id
+                                                  INTEGER
+                                                  PRIMARY
+                                                  KEY,
+                                                  analysis_id
+                                                  INTEGER
+                                                  NOT
+                                                  NULL,
+                                                  code
+                                                  TEXT
+                                                  NOT
+                                                  NULL,
+                                                  severity
+                                                  TEXT
+                                                  NOT
+                                                  NULL,
+                                                  message
+                                                  TEXT
+                                                  NOT
+                                                  NULL,
+                                                  position_seconds
+                                                  REAL,
+                                                  FOREIGN
+                                                  KEY
+                                              (
+                                                  analysis_id
+                                              )
+                                                  REFERENCES analysis
+                                              (
+                                                  id
+                                              )
+                                                  ON DELETE CASCADE
+                                                  );
+                                              """)
+                self.connection.execute("PRAGMA user_version = 2")
+
+        elif version == 1:
+            with self.connection:
+                self.connection.execute(
+                    "ALTER TABLE audio_file ADD COLUMN analyzer_fingerprint TEXT"
+                )
+                self.connection.execute(
+                    "ALTER TABLE audio_file ADD COLUMN scan_state TEXT NOT NULL DEFAULT 'completed'"
+                )
+                self.connection.execute("PRAGMA user_version = 2")
+
+        elif version != 2:
+            raise RuntimeError(f"Unsupported database schema version: {version}")
 
     def is_current(
         self,
         path: str,
         size: int,
         mtime_ns: int,
+        fingerprint: str,
     ) -> bool:
         row = self.connection.execute(
             """
-            SELECT 1 FROM audio_file
+            SELECT 1
+            FROM audio_file
             WHERE path = ?
               AND size = ?
               AND mtime_ns = ?
+              AND analyzer_fingerprint = ?
+              AND scan_state = 'completed'
             """,
-            (path, size, mtime_ns),
+            (path, size, mtime_ns, fingerprint),
         ).fetchone()
 
         return row is not None
@@ -81,21 +174,23 @@ class ScanRepository:
         size: int,
         mtime_ns: int,
         result: ScanResult,
+        fingerprint: str,
+        scan_state: str = "completed",
     ) -> None:
         scanned_at = datetime.now(UTC).isoformat()
 
         with self.connection:
             self.connection.execute(
                 """
-                INSERT INTO audio_file (
-                    path, size, mtime_ns, status, scanned_at
-                )
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(path) DO UPDATE SET
+                INSERT INTO audio_file (path, size, mtime_ns, status, scanned_at, analyzer_fingerprint, scan_state)
+                VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO
+                UPDATE SET
                     size = excluded.size,
                     mtime_ns = excluded.mtime_ns,
                     status = excluded.status,
-                    scanned_at = excluded.scanned_at
+                    scanned_at = excluded.scanned_at,
+                    analyzer_fingerprint = excluded.analyzer_fingerprint,
+                    scan_state = excluded.scan_state
                 """,
                 (
                     relative_path,
@@ -103,6 +198,8 @@ class ScanRepository:
                     mtime_ns,
                     result.status,
                     scanned_at,
+                    fingerprint,
+                    scan_state,
                 ),
             )
 

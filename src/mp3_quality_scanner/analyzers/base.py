@@ -10,6 +10,11 @@ class Analyzer(ABC):
     def name(self) -> str:
         """Unique analyzer identifier."""
 
+    @property
+    def version(self) -> str:
+        """Algorithm version used for cache invalidation."""
+        return "1"
+
     @abstractmethod
     def analyze(self, path: Path) -> AnalysisResult:
         """Analyze an audio file and return findings."""

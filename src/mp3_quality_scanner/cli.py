@@ -41,6 +41,10 @@ def scan(
         bool,
         typer.Option("--force", help="Reanalyze all files"),
     ] = False,
+    workers: Annotated[
+        int | None,
+        typer.Option("--workers", "-w"),
+    ] = None,
 ) -> None:
     """Scan MP3 files and persist analysis results."""
     from mp3_quality_scanner.analyzers.integrity import IntegrityAnalyzer
@@ -67,6 +71,7 @@ def scan(
             directory=path,
             repository=repository,
             force=force,
+            workers=workers or settings.workers,
         )
 
         repository.export_csv(report_path)
