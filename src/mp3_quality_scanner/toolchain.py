@@ -1,4 +1,3 @@
-
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -34,22 +33,17 @@ def check_tool(name: str) -> ToolInfo:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ToolchainError(
-            f"Failed to execute {name}: {exc}"
-        ) from exc
+        raise ToolchainError(f"Failed to execute {name}: {exc}") from exc
 
     if result.returncode != 0:
         raise ToolchainError(
-            f"{name} returned exit code {result.returncode}: "
-            f"{result.stderr.strip()}"
+            f"{name} returned exit code {result.returncode}: {result.stderr.strip()}"
         )
 
     version = result.stdout.splitlines()
 
     if not version:
-        raise ToolchainError(
-            f"{name} returned no version information"
-        )
+        raise ToolchainError(f"{name} returned no version information")
 
     return ToolInfo(
         name=name,

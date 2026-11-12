@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 from mp3_quality_scanner.analyzers.base import Analyzer
@@ -8,6 +9,16 @@ from mp3_quality_scanner.models import (
     ScanResult,
     Severity,
 )
+from mp3_quality_scanner.repository import ScanRepository
+
+
+@dataclass
+class ScanStatistics:
+    discovered: int = 0
+    analyzed: int = 0
+    skipped: int = 0
+    errors: int = 0
+    warnings: int = 0
 
 
 class ScanRunner:
@@ -36,7 +47,54 @@ class ScanRunner:
 
         return result
 
-    def scan_directory(self, directory: Path) -> list[ScanResult]:
-        files = discover_mp3_files(directory)
+    def scan_directory(
+        self,
+        directory: Path,
+        repository: ScanRepository,
+        force: bool = False,
+    ) -> ScanStatistics:
+        stats = ScanStatistics()
 
-        return [self.scan_file(path) for path in files]
+        files = discover_mp3_files(directory)
+        stats.discovered = len(files)
+
+        for index, path in enumerate(files, start=1):
+            relative_path = path.relative_to(directory).as_posix()
+
+            try:
+                stat = path.stat()
+            except OSError as exc:
+                print(f"[{index}/{len(files)}] STAT ERROR: {path}: {exc}")
+                stats.errors += 1
+                continue
+
+            if not force and repository.is_current(
+                relative_path,
+                stat.st_size,
+                stat.st_mtime_ns,
+            ):
+                stats.skipped += 1
+                continue
+
+            result = self.scan_file(path)
+
+            repository.save(
+                relative_path=relative_path,
+                size=stat.st_size,
+                mtime_ns=stat.st_mtime_ns,
+                result=result,
+            )
+
+            stats.analyzed += 1
+
+            if result.status == "error":
+                stats.errors += 1
+            elif result.status == "warning":
+                stats.warnings += 1
+
+            print(
+                f"[{index}/{len(files)}] {result.status.upper()}: {relative_path}",
+                flush=True,
+            )
+
+        return stats

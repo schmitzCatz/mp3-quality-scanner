@@ -1,4 +1,3 @@
-
 import subprocess
 from unittest.mock import patch
 
@@ -37,10 +36,13 @@ def test_tool_available() -> None:
 
 
 def test_tool_missing() -> None:
-    with patch(
-        "mp3_quality_scanner.toolchain.shutil.which",
-        return_value=None,
-    ), pytest.raises(ToolchainError, match="not found"):
+    with (
+        patch(
+            "mp3_quality_scanner.toolchain.shutil.which",
+            return_value=None,
+        ),
+        pytest.raises(ToolchainError, match="not found"),
+    ):
         check_tool("ffmpeg")
 
 
@@ -60,15 +62,14 @@ def test_tool_execution_failed() -> None:
         patch(
             "mp3_quality_scanner.toolchain.subprocess.run",
             return_value=completed,
-        ),pytest.raises(ToolchainError, match="exit code 1")
+        ),
+        pytest.raises(ToolchainError, match="exit code 1"),
     ):
         check_tool("ffprobe")
 
 
 def test_toolchain_checks_both_tools() -> None:
-    with patch(
-        "mp3_quality_scanner.toolchain.check_tool"
-    ) as mock_check:
+    with patch("mp3_quality_scanner.toolchain.check_tool") as mock_check:
         check_toolchain()
 
     assert mock_check.call_count == 2

@@ -29,26 +29,26 @@ def scan(
             readable=True,
         ),
     ],
+    database: Annotated[
+        Path | None,
+        typer.Option("--database", "-d"),
+    ] = None,
     output: Annotated[
         Path | None,
-        typer.Option(
-            "--output",
-            "-o",
-            help="Output CSV report path",
-        ),
+        typer.Option("--output", "-o"),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Reanalyze all files"),
+    ] = False,
 ) -> None:
-    """Analyze MP3 files recursively."""
+    """Scan MP3 files and persist analysis results."""
     from mp3_quality_scanner.analyzers.integrity import IntegrityAnalyzer
-    from mp3_quality_scanner.reporting.csv_report import write_csv
+    from mp3_quality_scanner.repository import ScanRepository
     from mp3_quality_scanner.scanner import ScanRunner
-
-    report_path = output or settings.output_dir / "scan.csv"
-
-    runner = ScanRunner(
-        analyzers=[
-            IntegrityAnalyzer(),
-        ]
+    from mp3_quality_scanner.toolchain import (
+        ToolchainError,
+        check_toolchain,
     )
 
     try:
@@ -57,18 +57,29 @@ def scan(
         console.print(f"[red]Toolchain error: {exc}[/red]")
         raise typer.Exit(code=1) from exc
 
-    console.print(f"Scanning: {path}")
+    database_path = database or settings.output_dir / "scan.db"
+    report_path = output or settings.output_dir / "scan.csv"
 
-    results = runner.scan_directory(path)
-    write_csv(results, report_path)
+    runner = ScanRunner(analyzers=[IntegrityAnalyzer()])
 
-    errors = sum(result.status == "error" for result in results)
-    warnings = sum(result.status == "warning" for result in results)
+    with ScanRepository(database_path) as repository:
+        stats = runner.scan_directory(
+            directory=path,
+            repository=repository,
+            force=force,
+        )
 
-    console.print(f"[green]Scanned: {len(results)} files[/green]")
-    console.print(f"[red]Errors: {errors}[/red]")
-    console.print(f"[yellow]Warnings: {warnings}[/yellow]")
-    console.print(f"Report: {report_path}")
+        repository.export_csv(report_path)
+
+    console.print()
+    console.print("[bold]Scan completed[/bold]")
+    console.print(f"Discovered: {stats.discovered}")
+    console.print(f"Analyzed:   {stats.analyzed}")
+    console.print(f"Skipped:    {stats.skipped}")
+    console.print(f"Errors:     {stats.errors}")
+    console.print(f"Warnings:   {stats.warnings}")
+    console.print(f"Database:   {database_path}")
+    console.print(f"Report:     {report_path}")
 
 
 @app.command()
