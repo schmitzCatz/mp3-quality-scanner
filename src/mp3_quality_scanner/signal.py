@@ -5,7 +5,7 @@ from numpy.typing import NDArray
 
 
 def longest_true_run(
-        values: NDArray[np.bool_],
+    values: NDArray[np.bool_],
 ) -> int:
     """Return the longest consecutive run of True values."""
     if values.size == 0:
@@ -43,8 +43,8 @@ class RunTracker:
         )
 
     def update(
-            self,
-            clipped: NDArray[np.bool_],
+        self,
+        clipped: NDArray[np.bool_],
     ) -> None:
         for channel in range(self.channels):
             values = clipped[:, channel]

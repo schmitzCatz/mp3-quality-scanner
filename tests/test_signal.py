@@ -1,4 +1,3 @@
-
 import numpy as np
 
 from mp3_quality_scanner.signal import (
@@ -8,9 +7,7 @@ from mp3_quality_scanner.signal import (
 
 
 def test_longest_true_run() -> None:
-    values = np.array(
-        [False, True, True, False, True, True, True]
-    )
+    values = np.array([False, True, True, False, True, True, True])
 
     assert longest_true_run(values) == 3
 

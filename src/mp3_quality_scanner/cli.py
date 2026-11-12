@@ -5,6 +5,7 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
+from mp3_quality_scanner.analyzers.click import ClickAnalyzer
 from mp3_quality_scanner.analyzers.clipping import ClippingAnalyzer
 from mp3_quality_scanner.config import settings
 from mp3_quality_scanner.progress import ScanProgress
@@ -66,7 +67,7 @@ def scan(
     database_path = database or settings.output_dir / "scan.db"
     report_path = output or settings.output_dir / "scan.csv"
 
-    runner = ScanRunner(analyzers=[IntegrityAnalyzer(), ClippingAnalyzer()])
+    runner = ScanRunner(analyzers=[IntegrityAnalyzer(), ClippingAnalyzer(), ClickAnalyzer()])
 
     with ScanRepository(database_path) as repository:
         with ScanProgress(console) as progress:

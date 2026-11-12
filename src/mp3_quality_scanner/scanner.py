@@ -1,4 +1,3 @@
-
 from collections.abc import Callable
 from concurrent.futures import (
     FIRST_COMPLETED,
@@ -131,10 +130,7 @@ class ScanRunner:
                     # Unexpected analyzer failures are retryable.
                     scan_state = (
                         "failed"
-                        if any(
-                            finding.code == "ANALYZER_FAILED"
-                            for finding in result.findings
-                        )
+                        if any(finding.code == "ANALYZER_FAILED" for finding in result.findings)
                         else "completed"
                     )
 
@@ -180,9 +176,7 @@ class ScanRunner:
         # Run analyzers concurrently.
         with ThreadPoolExecutor(max_workers=workers) as executor:
             for path in files:
-                relative_path = path.relative_to(
-                    directory
-                ).as_posix()
+                relative_path = path.relative_to(directory).as_posix()
 
                 try:
                     stat = path.stat()

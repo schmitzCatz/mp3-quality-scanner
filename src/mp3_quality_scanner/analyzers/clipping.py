@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import numpy as np
@@ -69,18 +68,12 @@ class ClippingAnalyzer(Analyzer):
 
             # Accumulate squared amplitudes using float64
             # to avoid numerical precision issues.
-            sum_squares += float(
-                np.sum(
-                    np.square(chunk, dtype=np.float64)
-                )
-            )
+            sum_squares += float(np.sum(np.square(chunk, dtype=np.float64)))
 
             # Track consecutive clipped samples per channel,
             # including runs crossing chunk boundaries.
             if run_tracker is None:
-                run_tracker = RunTracker(
-                    channels=chunk.shape[1]
-                )
+                run_tracker = RunTracker(channels=chunk.shape[1])
 
             run_tracker.update(clipped)
 
@@ -105,11 +98,7 @@ class ClippingAnalyzer(Analyzer):
         clipping_ratio = clipped_samples / total_samples
         rms = (sum_squares / total_samples) ** 0.5
 
-        longest_run = (
-            run_tracker.longest
-            if run_tracker is not None
-            else 0
-        )
+        longest_run = run_tracker.longest if run_tracker is not None else 0
 
         # Detect excessive clipping.
         if clipping_ratio >= self.MIN_CLIPPING_RATIO:
@@ -117,10 +106,7 @@ class ClippingAnalyzer(Analyzer):
                 Finding(
                     code="HIGH_CLIPPING_RATIO",
                     severity=Severity.WARNING,
-                    message=(
-                        f"Clipping ratio: {clipping_ratio:.4%}, "
-                        f"peak: {peak:.4f}"
-                    ),
+                    message=(f"Clipping ratio: {clipping_ratio:.4%}, peak: {peak:.4f}"),
                 )
             )
 
@@ -130,10 +116,7 @@ class ClippingAnalyzer(Analyzer):
                 Finding(
                     code="SUSTAINED_CLIPPING",
                     severity=Severity.WARNING,
-                    message=(
-                        "Longest near-full-scale run: "
-                        f"{longest_run} samples"
-                    ),
+                    message=(f"Longest near-full-scale run: {longest_run} samples"),
                 )
             )
 
