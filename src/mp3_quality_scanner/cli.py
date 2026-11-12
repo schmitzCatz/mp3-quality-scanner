@@ -9,6 +9,7 @@ from mp3_quality_scanner.analyzers.click import ClickAnalyzer
 from mp3_quality_scanner.analyzers.clipping import ClippingAnalyzer
 from mp3_quality_scanner.config import settings
 from mp3_quality_scanner.progress import ScanProgress
+from mp3_quality_scanner.reporting.console import render_quality_report
 from mp3_quality_scanner.toolchain import ToolchainError, check_toolchain
 
 app = typer.Typer(
@@ -80,6 +81,10 @@ def scan(
             )
 
         repository.export_csv(report_path)
+        render_quality_report(
+            repository=repository,
+            limit=20,
+        )
 
     console.print()
     console.print("[bold]Scan completed[/bold]")
