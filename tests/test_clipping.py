@@ -1,71 +1,113 @@
-from pathlib import Path
-from unittest.mock import patch
-
 import numpy as np
+from numpy.typing import NDArray
 
-from mp3_quality_scanner.analyzers.clipping import ClippingAnalyzer
+from mp3_quality_scanner.analyzers.clipping import (
+    ClippingProcessor,
+)
+from mp3_quality_scanner.models import AnalysisResult
 
 
-def test_normal_audio_has_no_findings() -> None:
-    samples = np.array(
-        [
-            [0.1, -0.1],
-            [0.5, -0.5],
-            [0.8, -0.8],
-        ],
+def analyze_chunks(
+    chunks: list[NDArray[np.float32]],
+) -> AnalysisResult:
+    processor = ClippingProcessor()
+
+    for chunk in chunks:
+        processor.process(chunk)
+
+    return processor.finish()
+
+
+def finding_codes(
+    chunks: list[NDArray[np.float32]],
+) -> set[str]:
+    result = analyze_chunks(chunks)
+
+    return {finding.code for finding in result.findings}
+
+
+def test_silence_has_no_clipping() -> None:
+    samples = np.zeros(
+        (44100, 2),
         dtype=np.float32,
     )
 
-    with patch(
-        "mp3_quality_scanner.analyzers.clipping.decode_audio",
-        return_value=iter([samples]),
-    ):
-        result = ClippingAnalyzer().analyze(Path("test.mp3"))
-
-    assert result.findings == []
+    assert finding_codes([samples]) == set()
 
 
-def test_clipping_ratio_detected() -> None:
-    samples = np.ones((1000, 2), dtype=np.float32)
+def test_empty_audio() -> None:
+    result = analyze_chunks([])
 
-    with patch(
-        "mp3_quality_scanner.analyzers.clipping.decode_audio",
-        return_value=iter([samples]),
-    ):
-        result = ClippingAnalyzer().analyze(Path("test.mp3"))
+    assert {finding.code for finding in result.findings} == {"EMPTY_AUDIO"}
 
-    codes = {finding.code for finding in result.findings}
+
+def test_high_clipping_ratio() -> None:
+    samples = np.zeros(
+        (10000, 2),
+        dtype=np.float32,
+    )
+
+    samples[100:200, 0] = 1.0
+
+    codes = finding_codes([samples])
 
     assert "HIGH_CLIPPING_RATIO" in codes
-    assert "SUSTAINED_CLIPPING" in codes
 
 
-def test_sustained_clipping_across_chunks() -> None:
-    first = np.array(
-        [[0.0, 0.0]] + [[1.0, 0.0]] * 5,
-        dtype=np.float32,
-    )
-    second = np.array(
-        [[1.0, 0.0]] * 5 + [[0.0, 0.0]],
+def test_sustained_clipping() -> None:
+    samples = np.zeros(
+        (10000, 2),
         dtype=np.float32,
     )
 
-    with patch(
-        "mp3_quality_scanner.analyzers.clipping.decode_audio",
-        return_value=iter([first, second]),
-    ):
-        result = ClippingAnalyzer().analyze(Path("test.mp3"))
+    samples[100:120, 0] = 1.0
 
-    codes = {finding.code for finding in result.findings}
+    codes = finding_codes([samples])
 
     assert "SUSTAINED_CLIPPING" in codes
 
 
-def test_empty_audio_detected() -> None:
-    with patch(
-        "mp3_quality_scanner.analyzers.clipping.decode_audio",
-        return_value=iter([]),
-    ):
-        result = ClippingAnalyzer().analyze(Path("test.mp3"))
+def test_clipping_across_chunk_boundary() -> None:
+    samples = np.zeros(
+        (1000, 2),
+        dtype=np.float32,
+    )
 
-    assert result.findings[0].code == "EMPTY_AUDIO"
+    samples[496:504, 0] = 1.0
+
+    codes = finding_codes(
+        [
+            samples[:500],
+            samples[500:],
+        ]
+    )
+
+    assert "SUSTAINED_CLIPPING" in codes
+
+
+def test_no_false_clipping_below_threshold() -> None:
+    samples = np.full(
+        (10000, 2),
+        0.8,
+        dtype=np.float32,
+    )
+
+    assert finding_codes([samples]) == set()
+
+
+def test_invalid_pcm_raises_error() -> None:
+    samples = np.zeros(
+        (1000, 2),
+        dtype=np.float32,
+    )
+
+    samples[100, 0] = np.nan
+
+    processor = ClippingProcessor()
+
+    try:
+        processor.process(samples)
+    except ValueError as exc:
+        assert "Non-finite" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")

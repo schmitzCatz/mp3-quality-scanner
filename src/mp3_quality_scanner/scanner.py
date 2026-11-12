@@ -10,6 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from mp3_quality_scanner.analyzers.base import Analyzer
+from mp3_quality_scanner.analyzers.streaming import StreamingAnalyzer
 from mp3_quality_scanner.discovery import discover_mp3_files
 from mp3_quality_scanner.fingerprint import analyzer_fingerprint
 from mp3_quality_scanner.models import (
@@ -18,6 +19,7 @@ from mp3_quality_scanner.models import (
     ScanResult,
     Severity,
 )
+from mp3_quality_scanner.pipeline import AudioPipeline
 from mp3_quality_scanner.repository import ScanRepository
 
 
@@ -54,13 +56,17 @@ class ScanRunner:
         self.analyzers = analyzers
 
     def scan_file(self, path: Path) -> ScanResult:
-        """Execute all analyzers for a single audio file."""
         result = ScanResult(path=path)
 
+        streaming_analyzers: list[StreamingAnalyzer] = []
+
         for analyzer in self.analyzers:
+            if isinstance(analyzer, StreamingAnalyzer):
+                streaming_analyzers.append(analyzer)
+                continue
+
             try:
                 analysis = analyzer.analyze(path)
-
             except Exception as exc:
                 analysis = AnalysisResult(
                     analyzer=analyzer.name,
@@ -74,6 +80,25 @@ class ScanRunner:
                 )
 
             result.analyses.append(analysis)
+
+        if streaming_analyzers:
+            try:
+                pipeline = AudioPipeline(streaming_analyzers)
+                result.analyses.extend(pipeline.analyze(path))
+            except Exception as exc:
+                for analyzer in streaming_analyzers:
+                    result.analyses.append(
+                        AnalysisResult(
+                            analyzer=analyzer.name,
+                            findings=[
+                                Finding(
+                                    code="ANALYZER_FAILED",
+                                    severity=Severity.ERROR,
+                                    message=str(exc),
+                                )
+                            ],
+                        )
+                    )
 
         return result
 

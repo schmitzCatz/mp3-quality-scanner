@@ -1,11 +1,12 @@
-from pathlib import Path
-
 import numpy as np
 from numpy.typing import NDArray
 from scipy.ndimage import median_filter
 
-from mp3_quality_scanner.analyzers.base import Analyzer
-from mp3_quality_scanner.audio import decode_audio
+from mp3_quality_scanner.analyzers.streaming import (
+    AudioProcessor,
+    PCMChunk,
+    StreamingAnalyzer,
+)
 from mp3_quality_scanner.models import (
     AnalysisResult,
     Finding,
@@ -13,112 +14,152 @@ from mp3_quality_scanner.models import (
 )
 
 
-class ClickAnalyzer(Analyzer):
-    """Detect isolated impulsive artifacts in decoded audio."""
+class ClickProcessor(AudioProcessor):
+    """Detect impulsive artifacts across PCM chunk boundaries."""
 
-    SAMPLE_RATE = 22050
+    SAMPLE_RATE = 44100
     CHANNELS = 2
 
     WINDOW_SIZE = 101
     MIN_ABSOLUTE_RESIDUAL = 0.12
     MIN_RELATIVE_CONTRAST = 12.0
-    MAX_FINDINGS = 100
     MIN_EVENT_DISTANCE_SECONDS = 0.02
+    MAX_FINDINGS = 100
 
-    @property
-    def name(self) -> str:
-        return "click"
+    def __init__(self) -> None:
+        self.context = self.WINDOW_SIZE + 1
 
-    @property
-    def version(self) -> str:
-        return "1"
+        self.buffer = np.empty(
+            (0, self.CHANNELS),
+            dtype=np.float32,
+        )
 
-    def analyze(self, path: Path) -> AnalysisResult:
-        findings: list[Finding] = []
+        self.buffer_start = 0
+        self.next_frame = 0
+        self.total_frames = 0
 
-        # Retain a small overlap so that clicks crossing
-        # PCM chunk boundaries can still be detected.
-        overlap_frames = self.WINDOW_SIZE
-        previous_tail: NDArray[np.float32] | None = None
+        self.last_event_frame = -(10**18)
+        self.min_distance_frames = round(self.MIN_EVENT_DISTANCE_SECONDS * self.SAMPLE_RATE)
 
-        processed_frames = 0
-        last_event_seconds = float("-inf")
+        self.findings: list[Finding] = []
+        self.suppressed_findings = 0
 
-        for chunk in decode_audio(
-            path,
-            sample_rate=self.SAMPLE_RATE,
-            channels=self.CHANNELS,
-        ):
-            if chunk.size == 0:
-                continue
+    def process(self, chunk: PCMChunk) -> None:
+        if chunk.size == 0:
+            return
 
-            if previous_tail is not None:
-                samples = np.concatenate(
-                    (previous_tail, chunk),
-                    axis=0,
+        if chunk.ndim != 2 or chunk.shape[1] != self.CHANNELS:
+            raise ValueError("Unexpected PCM channel layout")
+
+        if not np.all(np.isfinite(chunk)):
+            raise ValueError("Non-finite PCM samples")
+
+        self.buffer = np.concatenate(
+            (self.buffer, chunk),
+            axis=0,
+        )
+
+        self.total_frames += len(chunk)
+
+        # Keep right context for the next chunk.
+        valid_end = self.total_frames - self.context
+
+        if valid_end <= self.next_frame:
+            return
+
+        self._process_candidates(
+            valid_start=self.next_frame,
+            valid_end=valid_end,
+        )
+
+        self.next_frame = valid_end
+
+        # Retain left context only.
+        keep_from = max(
+            self.buffer_start,
+            self.next_frame - self.context,
+        )
+
+        self.buffer = self.buffer[keep_from - self.buffer_start :].copy()
+
+        self.buffer_start = keep_from
+
+    def finish(self) -> AnalysisResult:
+        # Flush remaining frames at end of stream.
+        if self.total_frames > self.next_frame:
+            self._process_candidates(
+                valid_start=self.next_frame,
+                valid_end=self.total_frames,
+            )
+
+            self.next_frame = self.total_frames
+
+        findings = list(self.findings)
+
+        if self.suppressed_findings:
+            findings.append(
+                Finding(
+                    code="CLICK_FINDINGS_TRUNCATED",
+                    severity=Severity.INFO,
+                    message=(
+                        f"{self.suppressed_findings} additional "
+                        "click candidates omitted from report"
+                    ),
                 )
-                offset = processed_frames - len(previous_tail)
-            else:
-                samples = chunk
-                offset = processed_frames
-
-            candidates = self._detect_candidates(samples)
-
-            for frame_index, score in candidates:
-                global_frame = offset + frame_index
-                position_seconds = global_frame / self.SAMPLE_RATE
-
-                # Suppress repeated detections from the same
-                # short impulse.
-                if position_seconds - last_event_seconds < self.MIN_EVENT_DISTANCE_SECONDS:
-                    continue
-
-                findings.append(
-                    Finding(
-                        code="POSSIBLE_CLICK",
-                        severity=Severity.WARNING,
-                        message=(f"Possible impulsive artifact (contrast={score:.1f})"),
-                        position_seconds=round(
-                            position_seconds,
-                            3,
-                        ),
-                    )
-                )
-
-                last_event_seconds = position_seconds
-
-                if len(findings) >= self.MAX_FINDINGS:
-                    break
-
-            processed_frames += len(chunk)
-
-            previous_tail = samples[-overlap_frames:].copy()
-
-            if len(findings) >= self.MAX_FINDINGS:
-                break
+            )
 
         return AnalysisResult(
-            analyzer=self.name,
+            analyzer="click",
             findings=findings,
         )
+
+    def _process_candidates(
+        self,
+        valid_start: int,
+        valid_end: int,
+    ) -> None:
+        candidates = self._detect_candidates(self.buffer)
+
+        for local_frame, score in candidates:
+            global_frame = self.buffer_start + local_frame
+
+            if not (valid_start <= global_frame < valid_end):
+                continue
+
+            if global_frame - self.last_event_frame < self.min_distance_frames:
+                continue
+
+            self.last_event_frame = global_frame
+
+            if len(self.findings) >= self.MAX_FINDINGS:
+                self.suppressed_findings += 1
+                continue
+
+            self.findings.append(
+                Finding(
+                    code="POSSIBLE_CLICK",
+                    severity=Severity.WARNING,
+                    message=(f"Possible impulsive artifact (contrast={score:.1f})"),
+                    position_seconds=round(
+                        global_frame / self.SAMPLE_RATE,
+                        3,
+                    ),
+                )
+            )
 
     def _detect_candidates(
         self,
         samples: NDArray[np.float32],
     ) -> list[tuple[int, float]]:
-        """Find isolated sample discontinuities."""
-
         if len(samples) < self.WINDOW_SIZE:
             return []
 
-        # Residual against linear interpolation of neighbors.
         residual = np.zeros_like(samples)
 
         residual[1:-1] = samples[1:-1] - 0.5 * (samples[:-2] + samples[2:])
 
         magnitude = np.abs(residual)
 
-        # Local robust noise estimate.
         local_median = median_filter(
             magnitude,
             size=(self.WINDOW_SIZE, 1),
@@ -133,27 +174,16 @@ class ClickAnalyzer(Analyzer):
             mode="reflect",
         )
 
-        # Robust local scale estimate.
         local_scale = 1.4826 * local_mad + 1e-6
-
         contrast = magnitude / local_scale
 
-        candidates_mask = (magnitude >= self.MIN_ABSOLUTE_RESIDUAL) & (
-            contrast >= self.MIN_RELATIVE_CONTRAST
-        )
+        mask = (magnitude >= self.MIN_ABSOLUTE_RESIDUAL) & (contrast >= self.MIN_RELATIVE_CONTRAST)
 
-        # Ignore the boundary samples where the residual
-        # cannot be computed correctly.
-        candidates_mask[0] = False
-        candidates_mask[-1] = False
+        mask[0] = False
+        mask[-1] = False
 
-        frames, channels = np.nonzero(candidates_mask)
+        frames, channels = np.nonzero(mask)
 
-        if frames.size == 0:
-            return []
-
-        # Combine channels by frame, retaining the strongest
-        # candidate score.
         scores: dict[int, float] = {}
 
         for frame, channel in zip(
@@ -161,12 +191,27 @@ class ClickAnalyzer(Analyzer):
             channels,
             strict=True,
         ):
-            frame_index = int(frame)
+            index = int(frame)
             score = float(contrast[frame, channel])
 
-            scores[frame_index] = max(
-                scores.get(frame_index, 0.0),
+            scores[index] = max(
+                scores.get(index, 0.0),
                 score,
             )
 
         return sorted(scores.items())
+
+
+class ClickAnalyzer(StreamingAnalyzer):
+    """Detect possible clicks in decoded audio."""
+
+    @property
+    def name(self) -> str:
+        return "click"
+
+    @property
+    def version(self) -> str:
+        return "3"
+
+    def create_processor(self) -> AudioProcessor:
+        return ClickProcessor()
