@@ -2,8 +2,6 @@
 
 A Python 3.12 tool for identifying potentially audible defects in MP3 collections. It scans recursively, persists results in SQLite, and supports reviewing suspicious files without modifying the originals.
 
-> **Release candidate documentation for v1.0.0.** Verify the actual CLI entry point and options in your local `pyproject.toml` / CLI implementation before publishing. No command-line flags are assumed here.
-
 ## What it checks
 
 | Analyzer | Purpose | Limitations |
