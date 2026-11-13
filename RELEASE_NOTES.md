@@ -1,11 +1,18 @@
-# MP3 Quality Scanner 1.0.0
+# MP3 Quality Scanner — v1.1.0
 
-First stable release candidate of a local MP3 quality assessment tool.
+## Added
+- ID3 metadata persistence for title, album, artist, track number and disc number.
+- ID3 metadata fields in CSV exports.
+- SQLite schema v5 with automatic migration from previous versions.
 
-**Highlights:** integrity checks via FFmpeg/FFprobe; clipping, click and dropout detection; shared streaming analysis; persisted SQLite scan results and cache; versioned quality scores; CSV export and Rich console reports.
+## Improved
+- Automatic recalculation of outdated quality scores.
+- Preservation of cached scan results during quality model updates.
+- Extended migration tests for schema v3 → v5 and v4 → v5.
 
-**Important:** Quality scores and timestamps are diagnostic hints. Always listen to flagged passages before replacing or discarding files. Original MP3s are not modified.
+## Fixed
+- Corrected SQLite UPSERT handling for audio files and metadata.
+- Fixed schema version detection for existing databases.
 
-**Requirements:** Python 3.12, FFmpeg/FFprobe and `uv` for source-based installation.
-
-**Before publishing:** confirm tested CLI command, license, distribution metadata and real-world validation results.
+## Validation
+- 85 automated tests passing.

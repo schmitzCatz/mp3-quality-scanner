@@ -1,12 +1,9 @@
 from collections.abc import Sequence
 from pathlib import Path
 
-from mp3_quality_scanner.analyzers.streaming import (
-    AudioProcessor,
-    StreamingAnalyzer,
-)
-from mp3_quality_scanner.audio import decode_audio
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.analysis.analyzers.streaming import AudioProcessor, StreamingAnalyzer
+from mp3_quality_scanner.analysis.audio import decode_audio
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     Finding,
     Severity,

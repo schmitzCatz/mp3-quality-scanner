@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from mp3_quality_scanner.discovery import discover_mp3_files
+from mp3_quality_scanner.scanning.discovery import discover_mp3_files
 
 
 def test_discover_mp3_files_recursively(tmp_path: Path) -> None:

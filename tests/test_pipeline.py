@@ -3,11 +3,9 @@ from unittest.mock import patch
 
 import numpy as np
 
-from mp3_quality_scanner.analyzers.click import ClickAnalyzer
-from mp3_quality_scanner.analyzers.clipping import (
-    ClippingAnalyzer,
-)
-from mp3_quality_scanner.pipeline import AudioPipeline
+from mp3_quality_scanner.analysis.analyzers.click import ClickAnalyzer
+from mp3_quality_scanner.analysis.analyzers.clipping import ClippingAnalyzer
+from mp3_quality_scanner.analysis.pipeline import AudioPipeline
 
 
 def test_pipeline_decodes_audio_once() -> None:
@@ -26,7 +24,7 @@ def test_pipeline_decodes_audio_once() -> None:
     )
 
     with patch(
-        "mp3_quality_scanner.pipeline.decode_audio",
+        "mp3_quality_scanner.analysis.pipeline.decode_audio",
         return_value=iter(
             [
                 samples[:16384],
@@ -65,7 +63,7 @@ def test_pipeline_handles_decoder_failure() -> None:
     )
 
     with patch(
-        "mp3_quality_scanner.pipeline.decode_audio",
+        "mp3_quality_scanner.analysis.pipeline.decode_audio",
         side_effect=RuntimeError("Decoder failed"),
     ):
         results = pipeline.analyze(Path("broken.mp3"))

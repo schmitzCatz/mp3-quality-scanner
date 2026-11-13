@@ -12,7 +12,7 @@ from rich.progress import (
 )
 from rich.table import Table
 
-from mp3_quality_scanner.scanner import (
+from mp3_quality_scanner.scanning.scanner import (
     ScanEvent,
     ScanEventType,
 )

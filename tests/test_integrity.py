@@ -3,8 +3,8 @@ import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
-from mp3_quality_scanner.analyzers.integrity import IntegrityAnalyzer
-from mp3_quality_scanner.models import Severity
+from mp3_quality_scanner.analysis.analyzers.integrity import IntegrityAnalyzer
+from mp3_quality_scanner.domain.models import Severity
 
 
 def test_valid_mp3(tmp_path: Path) -> None:
@@ -40,7 +40,7 @@ def test_valid_mp3(tmp_path: Path) -> None:
     )
 
     with patch(
-        "mp3_quality_scanner.analyzers.integrity.subprocess.run",
+        "mp3_quality_scanner.analysis.analyzers.integrity.subprocess.run",
         side_effect=[probe_result, decode_result],
     ):
         result = IntegrityAnalyzer().analyze(path)
@@ -70,7 +70,7 @@ def test_decode_failure(tmp_path: Path) -> None:
     )
 
     with patch(
-        "mp3_quality_scanner.analyzers.integrity.subprocess.run",
+        "mp3_quality_scanner.analysis.analyzers.integrity.subprocess.run",
         side_effect=[probe_result, decode_result],
     ):
         result = IntegrityAnalyzer().analyze(path)

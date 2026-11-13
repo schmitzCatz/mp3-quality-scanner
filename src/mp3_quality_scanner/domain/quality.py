@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from mp3_quality_scanner.models import ScanResult
+from mp3_quality_scanner.domain.models import ScanResult
 
 
 @dataclass(frozen=True)

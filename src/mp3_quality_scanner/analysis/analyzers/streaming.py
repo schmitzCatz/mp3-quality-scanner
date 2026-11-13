@@ -4,9 +4,9 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from mp3_quality_scanner.analyzers.base import Analyzer
-from mp3_quality_scanner.audio import decode_audio
-from mp3_quality_scanner.models import AnalysisResult
+from mp3_quality_scanner.analysis.analyzers.base import Analyzer
+from mp3_quality_scanner.analysis.audio import decode_audio
+from mp3_quality_scanner.domain.models import AnalysisResult
 
 PCMChunk = NDArray[np.float32]
 

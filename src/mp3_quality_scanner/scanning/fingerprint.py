@@ -2,7 +2,7 @@ import hashlib
 import json
 from collections.abc import Sequence
 
-from mp3_quality_scanner.analyzers.base import Analyzer
+from mp3_quality_scanner.analysis.analyzers.base import Analyzer
 
 
 def analyzer_fingerprint(analyzers: Sequence[Analyzer]) -> str:

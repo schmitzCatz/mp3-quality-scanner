@@ -9,18 +9,19 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from mp3_quality_scanner.analyzers.base import Analyzer
-from mp3_quality_scanner.analyzers.streaming import StreamingAnalyzer
-from mp3_quality_scanner.discovery import discover_mp3_files
-from mp3_quality_scanner.fingerprint import analyzer_fingerprint
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.analysis.analyzers.base import Analyzer
+from mp3_quality_scanner.analysis.analyzers.streaming import StreamingAnalyzer
+from mp3_quality_scanner.analysis.pipeline import AudioPipeline
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     Finding,
     ScanResult,
     Severity,
 )
-from mp3_quality_scanner.pipeline import AudioPipeline
-from mp3_quality_scanner.repository import ScanRepository
+from mp3_quality_scanner.domain.tags import read_track_tags
+from mp3_quality_scanner.persistence.repository import ScanRepository
+from mp3_quality_scanner.scanning.discovery import discover_mp3_files
+from mp3_quality_scanner.scanning.fingerprint import analyzer_fingerprint
 
 
 @dataclass
@@ -159,6 +160,8 @@ class ScanRunner:
                         else "completed"
                     )
 
+                    tags = read_track_tags(result.path)
+
                     repository.save(
                         relative_path=relative_path,
                         size=size,
@@ -166,6 +169,7 @@ class ScanRunner:
                         result=result,
                         fingerprint=fingerprint,
                         scan_state=scan_state,
+                        tags=tags,
                     )
 
                 except Exception:

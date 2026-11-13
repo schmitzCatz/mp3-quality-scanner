@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from mp3_quality_scanner.analyzers.base import Analyzer
-from mp3_quality_scanner.fingerprint import analyzer_fingerprint
-from mp3_quality_scanner.models import AnalysisResult
+from mp3_quality_scanner.analysis.analyzers.base import Analyzer
+from mp3_quality_scanner.domain.models import AnalysisResult
+from mp3_quality_scanner.scanning.fingerprint import analyzer_fingerprint
 
 
 class DummyAnalyzer(Analyzer):

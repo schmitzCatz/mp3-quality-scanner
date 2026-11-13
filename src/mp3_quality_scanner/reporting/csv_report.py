@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from mp3_quality_scanner.models import ScanResult
+from mp3_quality_scanner.domain.models import ScanResult
 
 
 def write_csv(results: list[ScanResult], output: Path) -> None:

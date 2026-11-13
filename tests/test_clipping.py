@@ -1,10 +1,8 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from mp3_quality_scanner.analyzers.clipping import (
-    ClippingProcessor,
-)
-from mp3_quality_scanner.models import AnalysisResult
+from mp3_quality_scanner.analysis.analyzers.clipping import ClippingProcessor
+from mp3_quality_scanner.domain.models import AnalysisResult
 
 
 def analyze_chunks(
