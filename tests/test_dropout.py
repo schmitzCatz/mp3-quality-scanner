@@ -1,9 +1,7 @@
 import numpy as np
 import pytest
 
-from mp3_quality_scanner.analyzers.dropout import (
-    DropoutProcessor,
-)
+from mp3_quality_scanner.analysis.analyzers.dropout import DropoutProcessor
 
 SAMPLE_RATE = 44100
 

@@ -1,8 +1,6 @@
-"""Run with: uv run pytest tests/benchmarks/test_click_detection.py -v -s"""
-
 import pytest
 
-from mp3_quality_scanner.analyzers.click import ClickProcessor
+from mp3_quality_scanner.analysis.analyzers.click import ClickProcessor
 from tests.benchmarks.signals import SAMPLE_RATE, Scenario, scenarios
 
 # Allow 3 ms position tolerance because detection may peak on a neighboring sample.

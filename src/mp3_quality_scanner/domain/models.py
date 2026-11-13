@@ -54,6 +54,6 @@ class ScanResult:
 
     @property
     def quality_score(self) -> int | None:
-        from mp3_quality_scanner.quality import assess_quality
+        from mp3_quality_scanner.domain.quality import assess_quality
 
         return assess_quality(self).score

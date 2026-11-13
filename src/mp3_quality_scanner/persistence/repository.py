@@ -8,19 +8,20 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
 
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     AudioMetadata,
     Finding,
     ScanResult,
     Severity,
 )
-from mp3_quality_scanner.quality import (
+from mp3_quality_scanner.domain.quality import (
     QUALITY_MODEL_VERSION,
     assess_quality,
 )
+from mp3_quality_scanner.domain.tags import TrackTags
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,16 @@ class ScanRepository:
             # determine its version from the available columns.
             columns = self._table_columns("audio_file")
 
-            if "quality_model_version" in columns:
+            if {
+                "quality_model_version",
+                "title",
+                "album",
+                "artist",
+                "track_number",
+                "disc_number",
+            }.issubset(columns):
+                version = 5
+            elif "quality_model_version" in columns:
                 version = 4
             elif {
                 "quality_score",
@@ -129,6 +139,10 @@ class ScanRepository:
         if version < 4:
             self._migrate_to_v4()
             version = 4
+        # Migrate schema v4 -> v5.
+        if version < 5:
+            self._migrate_to_v5()
+            version = 5
 
         # Persist the current database schema version.
         with self._transaction():
@@ -195,6 +209,16 @@ class ScanRepository:
                     quality_label
                     TEXT,
                     quality_model_version
+                    INTEGER,
+                    title
+                    TEXT,
+                    album
+                    TEXT,
+                    artist
+                    TEXT,
+                    track_number
+                    INTEGER,
+                    disc_number
                     INTEGER
                 );
 
@@ -349,6 +373,26 @@ class ScanRepository:
 
             self.connection.execute("PRAGMA user_version = 4")
 
+    def _migrate_to_v5(self) -> None:
+        columns = self._table_columns("audio_file")
+
+        new_columns = {
+            "title": "TEXT",
+            "album": "TEXT",
+            "artist": "TEXT",
+            "track_number": "INTEGER",
+            "disc_number": "INTEGER",
+        }
+
+        with self._transaction():
+            for name, column_type in new_columns.items():
+                if name not in columns:
+                    self.connection.execute(
+                        f"ALTER TABLE audio_file ADD COLUMN {name} {column_type}"
+                    )
+
+            self.connection.execute("PRAGMA user_version = 5")
+
     def _backfill_quality_scores(self) -> None:
         rows = self.connection.execute(
             """
@@ -378,12 +422,14 @@ class ScanRepository:
                     """
                     UPDATE audio_file
                     SET quality_score = ?,
-                        quality_label = ?
+                        quality_label = ?,
+                        quality_model_version = ?
                     WHERE id = ?
                     """,
                     (
                         assessment.score,
                         assessment.label,
+                        QUALITY_MODEL_VERSION,
                         file_id,
                     ),
                 )
@@ -422,6 +468,7 @@ class ScanRepository:
         result: ScanResult,
         fingerprint: str,
         scan_state: str = "completed",
+        tags: TrackTags | None = None,
     ) -> None:
         assessment = assess_quality(result) if scan_state == "completed" else None
 
@@ -431,32 +478,43 @@ class ScanRepository:
 
         scanned_at = datetime.now(UTC).isoformat()
 
+        tags = tags or TrackTags()
+
         with self._transaction():
             self.connection.execute(
                 """
-                INSERT INTO audio_file (path,
-                                        size,
-                                        mtime_ns,
-                                        status,
-                                        scanned_at,
-                                        analyzer_fingerprint,
-                                        scan_state,
-                                        quality_score,
-                                        quality_label,
-                                        quality_model_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO
-                UPDATE SET
-                    size = excluded.size,
-                    mtime_ns = excluded.mtime_ns,
-                    status = excluded.status,
-                    scanned_at = excluded.scanned_at,
-                    analyzer_fingerprint =
-                    excluded.analyzer_fingerprint,
-                    scan_state = excluded.scan_state,
-                    quality_score = excluded.quality_score,
-                    quality_label = excluded.quality_label,
-                    quality_model_version = excluded.quality_model_version
-                """,
+                    INSERT INTO audio_file (path,
+                                            size,
+                                            mtime_ns,
+                                            status,
+                                            scanned_at,
+                                            analyzer_fingerprint,
+                                            scan_state,
+                                            quality_score,
+                                            quality_label,
+                                            quality_model_version,
+                                            title,
+                                            album,
+                                            artist,
+                                            track_number,
+                                            disc_number)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO
+                    UPDATE SET
+                        size = excluded.size,
+                        mtime_ns = excluded.mtime_ns,
+                        status = excluded.status,
+                        scanned_at = excluded.scanned_at,
+                        analyzer_fingerprint = excluded.analyzer_fingerprint,
+                        scan_state = excluded.scan_state,
+                        quality_score = excluded.quality_score,
+                        quality_label = excluded.quality_label,
+                        quality_model_version = excluded.quality_model_version,
+                        title = excluded.title,
+                        album = excluded.album,
+                        artist = excluded.artist,
+                        track_number = excluded.track_number,
+                        disc_number = excluded.disc_number
+                    """,
                 (
                     relative_path,
                     size,
@@ -467,7 +525,12 @@ class ScanRepository:
                     scan_state,
                     quality_score,
                     quality_label,
-                    (QUALITY_MODEL_VERSION if assessment is not None else None),
+                    QUALITY_MODEL_VERSION if assessment is not None else None,
+                    tags.title,
+                    tags.album,
+                    tags.artist,
+                    tags.track_number,
+                    tags.disc_number,
                 ),
             )
 
@@ -649,6 +712,11 @@ class ScanRepository:
             """
             SELECT af.id,
                    af.path,
+                   af.title,
+                   af.album,
+                   af.artist,
+                   af.track_number,
+                   af.disc_number,
                    af.size,
                    af.mtime_ns,
                    af.status,
@@ -677,6 +745,11 @@ class ScanRepository:
 
         fieldnames = [
             "path",
+            "title",
+            "album",
+            "artist",
+            "track_number",
+            "disc_number",
             "size",
             "mtime_ns",
             "status",
@@ -730,6 +803,11 @@ class ScanRepository:
                 writer.writerow(
                     {
                         "path": row["path"],
+                        "title": row["title"],
+                        "album": row["album"],
+                        "artist": row["artist"],
+                        "track_number": row["track_number"],
+                        "disc_number": row["disc_number"],
                         "size": row["size"],
                         "mtime_ns": row["mtime_ns"],
                         "status": row["status"],
@@ -868,12 +946,14 @@ class ScanRepository:
                     """
                     UPDATE audio_file
                     SET quality_score = ?,
-                        quality_label = ?
+                        quality_label = ?,
+                        quality_model_version = ?
                     WHERE id = ?
                     """,
                     (
                         assessment.score,
                         assessment.label,
+                        QUALITY_MODEL_VERSION,
                         row["id"],
                     ),
                 )

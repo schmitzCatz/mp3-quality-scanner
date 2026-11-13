@@ -5,12 +5,12 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from mp3_quality_scanner.analyzers.click import ClickAnalyzer
-from mp3_quality_scanner.analyzers.clipping import ClippingAnalyzer
-from mp3_quality_scanner.analyzers.dropout import DropoutAnalyzer
+from mp3_quality_scanner.analysis.analyzers.click import ClickAnalyzer
+from mp3_quality_scanner.analysis.analyzers.clipping import ClippingAnalyzer
+from mp3_quality_scanner.analysis.analyzers.dropout import DropoutAnalyzer
 from mp3_quality_scanner.config import settings
-from mp3_quality_scanner.progress import ScanProgress
 from mp3_quality_scanner.reporting.console import render_quality_report
+from mp3_quality_scanner.scanning.progress import ScanProgress
 from mp3_quality_scanner.toolchain import ToolchainError, check_toolchain
 
 app = typer.Typer(
@@ -52,9 +52,9 @@ def scan(
     ] = None,
 ) -> None:
     """Scan MP3 files and persist analysis results."""
-    from mp3_quality_scanner.analyzers.integrity import IntegrityAnalyzer
-    from mp3_quality_scanner.repository import ScanRepository
-    from mp3_quality_scanner.scanner import ScanRunner
+    from mp3_quality_scanner.analysis.analyzers.integrity import IntegrityAnalyzer
+    from mp3_quality_scanner.persistence.repository import ScanRepository
+    from mp3_quality_scanner.scanning.scanner import ScanRunner
     from mp3_quality_scanner.toolchain import (
         ToolchainError,
         check_toolchain,

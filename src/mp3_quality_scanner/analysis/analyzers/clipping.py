@@ -1,16 +1,16 @@
 import numpy as np
 
-from mp3_quality_scanner.analyzers.streaming import (
+from mp3_quality_scanner.analysis.analyzers.streaming import (
     AudioProcessor,
     PCMChunk,
     StreamingAnalyzer,
 )
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.analysis.signal import RunTracker
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     Finding,
     Severity,
 )
-from mp3_quality_scanner.signal import RunTracker
 
 
 class ClippingProcessor(AudioProcessor):

@@ -3,8 +3,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from mp3_quality_scanner.analyzers.base import Analyzer
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.analysis.analyzers.base import Analyzer
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     AudioMetadata,
     Finding,

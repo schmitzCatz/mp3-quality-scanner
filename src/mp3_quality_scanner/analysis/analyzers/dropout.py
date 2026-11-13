@@ -4,11 +4,11 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from mp3_quality_scanner.analyzers.streaming import (
+from mp3_quality_scanner.analysis.analyzers.streaming import (
     AudioProcessor,
     StreamingAnalyzer,
 )
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     Finding,
     Severity,

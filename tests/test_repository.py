@@ -1,12 +1,12 @@
 from pathlib import Path
 
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     Finding,
     ScanResult,
     Severity,
 )
-from mp3_quality_scanner.repository import ScanRepository
+from mp3_quality_scanner.persistence.repository import ScanRepository
 
 FINGERPRINT_V1 = "test-fingerprint-v1"
 FINGERPRINT_V2 = "test-fingerprint-v2"

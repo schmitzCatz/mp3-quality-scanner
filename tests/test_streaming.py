@@ -4,10 +4,8 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from mp3_quality_scanner.analyzers.click import ClickAnalyzer
-from mp3_quality_scanner.analyzers.clipping import (
-    ClippingAnalyzer,
-)
+from mp3_quality_scanner.analysis.analyzers.click import ClickAnalyzer
+from mp3_quality_scanner.analysis.analyzers.clipping import ClippingAnalyzer
 
 
 @pytest.mark.parametrize(
@@ -26,7 +24,7 @@ def test_standalone_analyzer_uses_decoder(
     )
 
     with patch(
-        "mp3_quality_scanner.analyzers.streaming.decode_audio",
+        "mp3_quality_scanner.analysis.analyzers.streaming.decode_audio",
         return_value=iter([samples]),
     ) as decoder:
         result = analyzer.analyze(Path("test.mp3"))

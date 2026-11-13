@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from mp3_quality_scanner.models import AnalysisResult
+from mp3_quality_scanner.domain.models import AnalysisResult
 
 
 class Analyzer(ABC):

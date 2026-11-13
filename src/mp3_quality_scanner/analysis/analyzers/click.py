@@ -2,12 +2,12 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.ndimage import median_filter
 
-from mp3_quality_scanner.analyzers.streaming import (
+from mp3_quality_scanner.analysis.analyzers.streaming import (
     AudioProcessor,
     PCMChunk,
     StreamingAnalyzer,
 )
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     Finding,
     Severity,

@@ -1,6 +1,6 @@
 import numpy as np
 
-from mp3_quality_scanner.signal import (
+from mp3_quality_scanner.analysis.signal import (
     RunTracker,
     longest_true_run,
 )

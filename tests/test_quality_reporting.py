@@ -1,13 +1,13 @@
 from pathlib import Path
 
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     AudioMetadata,
     Finding,
     ScanResult,
     Severity,
 )
-from mp3_quality_scanner.repository import ScanRepository
+from mp3_quality_scanner.persistence.repository import ScanRepository
 
 
 def make_result(

@@ -2,14 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from mp3_quality_scanner.models import (
+from mp3_quality_scanner.domain.models import (
     AnalysisResult,
     AudioMetadata,
     Finding,
     ScanResult,
     Severity,
 )
-from mp3_quality_scanner.quality import assess_quality
+from mp3_quality_scanner.domain.quality import assess_quality
 
 
 def make_result(
